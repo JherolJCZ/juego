@@ -1,0 +1,1785 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bumper Arena Multiplayer</title>
+    <!-- Tailwind CSS para una interfaz espectacular -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PeerJS para multijugador P2P WebRTC sin servidor (Wi-Fi local/Hotspot) -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            touch-action: none;
+            overflow: hidden;
+            background-color: #0f172a;
+        }
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+        /* Efecto de pulso neón */
+        .neon-border {
+            box-shadow: 0 0 15px rgba(168, 85, 247, 0.6);
+        }
+        .neon-text-green {
+            text-shadow: 0 0 10px rgba(74, 222, 128, 0.8);
+        }
+        .neon-text-purple {
+            text-shadow: 0 0 10px rgba(168, 85, 247, 0.8);
+        }
+        /* Ocultar barra de scroll de forma elegante */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="text-white select-none">
+
+    <!-- CONTENEDOR PRINCIPAL DEL MENÚ -->
+    <div id="menu-screen" class="absolute inset-0 flex flex-col items-center justify-between p-6 z-10 bg-slate-900 bg-opacity-95 transition-all duration-300 overflow-y-auto">
+        
+        <!-- Cabecera / Título -->
+        <div class="text-center mt-6">
+            <h1 class="text-5xl md:text-6xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 animate-pulse">
+                BUMPER ARENA
+            </h1>
+            <p class="text-slate-400 mt-2 text-sm md:text-base tracking-widest font-semibold uppercase">
+                ⚡ ¡Empuja, sobrevive y domina! ⚡
+            </p>
+        </div>
+
+        <!-- Panel de Configuración de Jugador -->
+        <div class="w-full max-w-md bg-slate-800/80 p-6 rounded-2xl border border-slate-700/50 backdrop-blur-md my-4">
+            <h2 class="text-lg font-bold mb-4 text-purple-400 flex items-center gap-2">
+                <i class="fa-solid fa-user-gear"></i> Personaliza tu Bumper
+            </h2>
+            
+            <!-- Nombre -->
+            <div class="mb-4">
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Apodo</label>
+                <input type="text" id="player-name" maxlength="12" value="Jugador" 
+                       class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-purple-500 font-semibold transition-all">
+            </div>
+
+            <!-- Selector de Skin / Emoji -->
+            <div class="mb-4">
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Avatar / Gesto</label>
+                <div class="grid grid-cols-6 gap-2" id="emoji-selector">
+                    <!-- Rellenado dinámicamente -->
+                </div>
+            </div>
+
+            <!-- Selector de Color -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Color del Bumper</label>
+                <div class="flex justify-between gap-2" id="color-selector">
+                    <!-- Rellenado dinámicamente -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Botones de Acción -->
+        <div class="w-full max-w-md flex flex-col gap-3 mb-6">
+            <!-- Modo Solitario -->
+            <button id="btn-solo" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 py-4 px-6 rounded-xl font-bold text-lg shadow-lg transform active:scale-95 transition-all flex items-center justify-center gap-3">
+                <i class="fa-solid fa-robot text-xl"></i>
+                Modo Práctica (vs Bots)
+            </button>
+
+            <!-- Modo Multijugador (Crear) -->
+            <button id="btn-create" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 py-4 px-6 rounded-xl font-bold text-lg shadow-lg transform active:scale-95 transition-all flex items-center justify-center gap-3 neon-border">
+                <i class="fa-solid fa-gamepad text-xl"></i>
+                Crear Sala Multijugador
+            </button>
+
+            <!-- Indicador de unión a través de link directo -->
+            <div id="join-status-box" class="hidden text-center bg-slate-800/90 border border-indigo-500/50 p-4 rounded-xl">
+                <p class="text-indigo-300 font-semibold text-sm flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-spinner animate-spin"></i> Detectada invitación de sala externa...
+                </p>
+                <button id="btn-join-direct" class="mt-2 w-full bg-indigo-500 hover:bg-indigo-400 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors">
+                    ¡Unirse Ahora mismo!
+                </button>
+            </div>
+        </div>
+
+        <!-- Instructions / Tips -->
+        <div class="text-center text-xs text-slate-500 max-w-xs leading-relaxed">
+            <p><i class="fa-solid fa-circle-info"></i> Usa el arrastre de pantalla o ratón para moverte. Choca a otros para sacarlos de la isla.</p>
+            <p class="mt-1 font-semibold text-slate-400">¡Ideal para jugar compartiendo Zona Wi-Fi de tu móvil!</p>
+        </div>
+    </div>
+
+
+    <!-- PANTALLA DE SALA DE ESPERA (LOBBY) -->
+    <div id="lobby-screen" class="hidden absolute inset-0 flex flex-col items-center justify-between p-6 z-10 bg-slate-950 bg-opacity-98 transition-all duration-300">
+        
+        <div class="text-center mt-4">
+            <span class="bg-indigo-900/50 text-indigo-300 text-xs px-3 py-1.5 rounded-full font-bold uppercase tracking-wider border border-indigo-500/30">
+                <i class="fa-solid fa-users"></i> Sala Multijugador <span id="lobby-mode-tag" class="ml-1 text-[10px] bg-emerald-500 text-slate-950 px-1.5 py-0.5 rounded font-black">LOCAL P2P</span>
+            </span>
+            <h2 class="text-3xl font-black mt-2 text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
+                Sala de Espera
+            </h2>
+        </div>
+
+        <!-- Enlace para Compartir -->
+        <div class="w-full max-w-md bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col gap-2">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest"><i class="fa-solid fa-share-nodes"></i> Enlace de Invitación</span>
+            <p class="text-[10px] text-slate-500 -mt-1">Pasa este enlace por chat o haz que escaneen tu pantalla para unirse en tu mismo Wi-Fi de anclaje.</p>
+            <div class="flex gap-2 mt-1">
+                <input type="text" id="share-url" readonly class="bg-slate-950 border border-slate-700 text-slate-300 rounded-lg px-3 py-2 text-xs font-mono flex-1 focus:outline-none">
+                <button id="btn-copy-url" class="bg-indigo-600 hover:bg-indigo-500 text-xs font-bold px-4 py-2 rounded-lg transition-colors flex items-center gap-1 active:scale-95">
+                    <i class="fa-solid fa-copy"></i> Copiar
+                </button>
+            </div>
+            <div id="copy-toast" class="hidden text-center text-emerald-400 text-xs font-bold mt-1">
+                ¡Enlace copiado al portapapeles!
+            </div>
+        </div>
+
+        <!-- Lista de Jugadores Conectados -->
+        <div class="w-full max-w-md bg-slate-900/50 border border-slate-800 p-4 rounded-xl flex-1 my-4 flex flex-col">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex justify-between">
+                <span>Jugadores conectados</span>
+                <span id="player-count">1/8</span>
+            </span>
+            <div id="lobby-players-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                <!-- Se rellena dinámicamente -->
+            </div>
+        </div>
+
+        <!-- Acciones del Lobby -->
+        <div class="w-full max-w-md flex flex-col gap-3 mb-4">
+            <button id="btn-start-game" class="hidden w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 py-4 px-6 rounded-xl font-black text-lg shadow-lg transition-all flex items-center justify-center gap-2 transform active:scale-95">
+                <i class="fa-solid fa-play"></i> INICIAR PARTIDA
+            </button>
+            <p id="waiting-host-msg" class="text-center text-sm text-amber-400 animate-pulse font-medium">
+                Esperando que el creador inicie la partida...
+            </p>
+            <button id="btn-leave-lobby" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
+                <i class="fa-solid fa-right-from-bracket"></i> Salir de la Sala
+            </button>
+        </div>
+    </div>
+
+
+    <!-- INTERFAZ HUD DEL JUEGO (Sobre el Canvas) -->
+    <div id="game-hud" class="hidden absolute inset-0 pointer-events-none flex flex-col justify-between p-4 z-5">
+        
+        <!-- Top Row: Marcador de Jugadores Restantes y Cronómetro / Estado del Anillo -->
+        <div class="flex justify-between items-start w-full">
+            <!-- Vivos -->
+            <div class="bg-slate-900/90 border border-slate-700 px-4 py-2 rounded-xl backdrop-blur-sm flex items-center gap-2">
+                <span class="flex h-3 w-3 relative">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                </span>
+                <span class="text-xs font-bold text-slate-400 uppercase">En Arena:</span>
+                <span id="hud-alive-count" class="text-lg font-black text-rose-400">0</span>
+            </div>
+
+            <!-- Advertencia de Anillo que se encoge -->
+            <div id="hud-ring-warning" class="hidden bg-rose-600/90 border border-rose-400 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest animate-bounce flex items-center gap-2">
+                <i class="fa-solid fa-triangle-exclamation"></i> ¡EL ANILLO SE ESTÁ ENCOGIENDO!
+            </div>
+
+            <!-- Tu Score -->
+            <div class="bg-slate-900/90 border border-slate-700 px-4 py-2 rounded-xl backdrop-blur-sm text-right">
+                <span class="text-xs font-bold text-slate-400 uppercase">K.O.s:</span>
+                <span id="hud-score" class="text-lg font-black text-amber-400">0</span>
+            </div>
+        </div>
+
+        <!-- Indicador táctil visual para guiar el arrastre del dedo -->
+        <div class="w-full flex justify-center mb-6">
+            <div id="hud-touch-hint" class="bg-slate-900/80 border border-slate-700/60 px-4 py-2 rounded-full backdrop-blur-sm text-[11px] text-slate-400 animate-pulse flex items-center gap-2">
+                <i class="fa-solid fa-hand-pointer"></i> Desliza para impulsar tu Bumper
+            </div>
+        </div>
+    </div>
+
+
+    <!-- PANTALLA DE CUENTA REGRESIVA -->
+    <div id="countdown-overlay" class="hidden absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+        <span id="countdown-text" class="text-8xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-amber-500 drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] transition-all duration-100 transform scale-100">3</span>
+    </div>
+
+
+    <!-- PANEL DE FIN DE JUEGO / RESULTADOS -->
+    <div id="game-over-screen" class="hidden absolute inset-0 flex flex-col items-center justify-center p-6 z-10 bg-slate-950 bg-opacity-95 transition-all duration-300">
+        
+        <div class="text-center max-w-md w-full">
+            <h2 id="go-title" class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-amber-500 mb-2">
+                ¡ELIMINADO!
+            </h2>
+            <p id="go-subtitle" class="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-6">
+                Buen intento, pero caíste de la arena.
+            </p>
+
+            <!-- Tabla de posiciones de la ronda -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6 text-left">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2 border-b border-slate-800 pb-2">
+                    <i class="fa-solid fa-trophy text-amber-400"></i> Tabla de Posiciones Final
+                </h3>
+                <div id="go-leaderboard" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <!-- Rellenado dinámicamente -->
+                </div>
+            </div>
+
+            <!-- Acciones -->
+            <div class="flex flex-col gap-3">
+                <button id="btn-go-replay" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 py-4 px-6 rounded-xl font-bold text-lg shadow-lg transform active:scale-95 transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-rotate-left"></i> Jugar de Nuevo
+                </button>
+                <button id="btn-go-menu" class="w-full bg-slate-800 hover:bg-slate-700 py-3 rounded-xl font-semibold text-sm transition-colors text-slate-300">
+                    Volver al Menú Principal
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CANVAS DEL JUEGO -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Firebase de forma modular -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, deleteField } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // CONFIGURACIÓN DE FIREBASE E INICIALIZACIÓN
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'bumper-arena-multiplayer';
+        let db = null;
+        let auth = null;
+        let currentUserId = null;
+        let activeRoomId = null;
+        let isHost = false;
+        let unsubscribeRoom = null;
+        let usePeerJSFallback = false; // Se activa automáticamente si no hay Firebase configurado
+
+        // Variables de PeerJS P2P Fallback
+        let peer = null;
+        let peerConnections = {}; // Solo Host: map de peerId -> Connection object
+        let peerConnToHost = null; // Solo Invitado: Connection al Host
+
+        const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+        
+        async function initFirebase() {
+            if (!firebaseConfigStr) {
+                console.warn("Configuración de Firebase no provista. El juego correrá usando el Fallback PeerJS P2P (Wi-Fi Local / Hotspot).");
+                enablePeerJSFallback();
+                return;
+            }
+            try {
+                const firebaseConfig = JSON.parse(firebaseConfigStr);
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Autenticar siguiendo la Regla 3
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUserId = user.uid;
+                        console.log("Autenticación Firebase exitosa. UID:", currentUserId);
+                        detectRoomInUrl();
+                    }
+                });
+            } catch (err) {
+                console.error("Fallo al iniciar Firebase. Activando Fallback PeerJS:", err);
+                enablePeerJSFallback();
+            }
+        }
+
+        function enablePeerJSFallback() {
+            usePeerJSFallback = true;
+            document.getElementById("lobby-mode-tag").innerText = "P2P LOCAL (WI-FI)";
+            document.getElementById("lobby-mode-tag").className = "ml-1 text-[10px] bg-emerald-500 text-slate-950 px-1.5 py-0.5 rounded font-black";
+            // Generar un ID de usuario único local
+            currentUserId = 'user_' + Math.random().toString(36).substring(2, 9);
+            console.log("PeerJS fallback habilitado. ID de usuario local asignado:", currentUserId);
+            detectRoomInUrl();
+        }
+
+        // --- LISTA DE RECURSOS DEL MENÚ ---
+        const EMOJIS = ["😡", "😎", "🤪", "🤠", "👾", "🦊", "🐯", "🦖", "🐼", "🤡", "👹", "💀"];
+        const COLORS = [
+            { name: "Neon Pink", code: "#f43f5e" },
+            { name: "Cyan", code: "#06b6d4" },
+            { name: "Emerald", code: "#10b981" },
+            { name: "Amber", code: "#f59e0b" },
+            { name: "Purple", code: "#a855f7" },
+            { name: "Indigo", code: "#6366f1" }
+        ];
+
+        let selectedEmoji = EMOJIS[0];
+        let selectedColor = COLORS[0].code;
+
+        // --- ELEMENTOS DE LA INTERFAZ ---
+        const menuScreen = document.getElementById("menu-screen");
+        const lobbyScreen = document.getElementById("lobby-screen");
+        const gameHud = document.getElementById("game-hud");
+        const gameOverScreen = document.getElementById("game-over-screen");
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // --- SISTEMA DE AUDIO SINTETIZADO (Web Audio API para evitar assets externos) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'hit') {
+                    // Sonido de choque
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.15);
+                } else if (type === 'star') {
+                    // Sonido recolectar estrella
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                    osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.08); // E5
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.2);
+                } else if (type === 'boost') {
+                    // Sonido de turbo/impulso
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(80, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.25);
+                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.25);
+                } else if (type === 'die') {
+                    // Sonido caer / explotar
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+                    osc.frequency.linearRampToValueAtTime(30, audioCtx.currentTime + 0.5);
+                    gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.5);
+                }
+            } catch(e) {}
+        }
+
+        // --- CONSTRUCCIÓN DE LA INTERFAZ DE PERSONALIZACIÓN ---
+        function setupCustomizer() {
+            const emojiDiv = document.getElementById("emoji-selector");
+            EMOJIS.forEach((emoji, index) => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = `emoji-btn p-2 text-2xl rounded-lg border transition-all ${index === 0 ? 'border-purple-500 bg-purple-950/40' : 'border-slate-700 bg-slate-900/40'}`;
+                btn.innerText = emoji;
+                btn.onclick = () => {
+                    document.querySelectorAll(".emoji-btn").forEach(b => b.classList.replace("border-purple-500", "border-slate-700"));
+                    document.querySelectorAll(".emoji-btn").forEach(b => b.classList.remove("bg-purple-950/40"));
+                    btn.classList.replace("border-slate-700", "border-purple-500");
+                    btn.classList.add("bg-purple-950/40");
+                    selectedEmoji = emoji;
+                };
+                emojiDiv.appendChild(btn);
+            });
+
+            const colorDiv = document.getElementById("color-selector");
+            COLORS.forEach((color, index) => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = `color-btn w-10 h-10 rounded-full border-2 transition-all flex items-center justify-center ${index === 0 ? 'border-white scale-110' : 'border-transparent'}`;
+                btn.style.backgroundColor = color.code;
+                btn.onclick = () => {
+                    document.querySelectorAll(".color-btn").forEach(b => {
+                        b.classList.replace("border-white", "border-transparent");
+                        b.classList.remove("scale-110");
+                    });
+                    btn.classList.replace("border-transparent", "border-white");
+                    btn.classList.add("scale-110");
+                    selectedColor = color.code;
+                };
+                colorDiv.appendChild(btn);
+            });
+        }
+
+        // --- MODELO DEL JUEGO Y FÍSICA ---
+        const Arena = {
+            x: 0,
+            y: 0,
+            baseRadius: 320,
+            radius: 320,
+            targetRadius: 320,
+            shrinkSpeed: 0.15,
+            color: '#1e293b',
+            edgeColor: '#a855f7'
+        };
+
+        let players = {};
+        let food = [];
+        const maxFoodCount = 15;
+        let particles = [];
+        let scoreKO = 0;
+        let gameMode = 'solo'; // 'solo' o 'multi'
+        let isGameRunning = false;
+        let isCountdownActive = false; // Control de cuenta regresiva antes de arrancar
+        let isLocalAlive = true;
+        let leaderboard = [];
+
+        // Controles de Arrastre (Joystick Virtual o Ratón)
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let dragCurrent = { x: 0, y: 0 };
+        let localPlayerId = 'local_user';
+
+        // Estructura de un Jugador
+        class Player {
+            constructor(id, name, emoji, color, isBot = false) {
+                this.id = id;
+                this.name = name;
+                this.emoji = emoji;
+                this.color = color;
+                this.isBot = isBot;
+                this.x = (Math.random() - 0.5) * 200;
+                this.y = (Math.random() - 0.5) * 200;
+                this.vx = 0;
+                this.vy = 0;
+                this.radius = 20;
+                this.mass = 20;
+                this.score = 0;
+                this.alive = true;
+                this.trail = [];
+                this.lastUpdate = Date.now();
+                
+                // Propiedades específicas de Bots
+                if (isBot) {
+                    this.botTargetX = 0;
+                    this.botTargetY = 0;
+                    this.botNextDecision = 0;
+                }
+            }
+
+            update() {
+                if (!this.alive) return;
+
+                // Fricción / Resistencia del suelo
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+
+                // Actualizar posición
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Controlar límites (caída de la arena)
+                const distToCenter = Math.hypot(this.x - Arena.x, this.y - Arena.y);
+                if (distToCenter > Arena.radius + this.radius) {
+                    this.alive = false;
+                    playSound('die');
+                    createExplosion(this.x, this.y, this.color);
+                    
+                    // Otorgar punto al último que lo empujó si es posible
+                    if (this.lastHitBy && players[this.lastHitBy]) {
+                        players[this.lastHitBy].score += 1;
+                        if (this.lastHitBy === localPlayerId) {
+                            scoreKO++;
+                            document.getElementById("hud-score").innerText = scoreKO;
+                        }
+                    }
+                    checkEndGameConditions();
+                }
+
+                // Mantener registro de rastro (trail)
+                this.trail.push({ x: this.x, y: this.y });
+                if (this.trail.length > 10) this.trail.shift();
+            }
+
+            draw() {
+                if (!this.alive) return;
+
+                // Dibujar Rastro (Trail)
+                if (this.trail.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.trail[0].x, this.trail[0].y);
+                    for (let i = 1; i < this.trail.length; i++) {
+                        ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                    }
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = this.radius * 0.4;
+                    ctx.lineCap = 'round';
+                    ctx.globalAlpha = 0.25;
+                    ctx.stroke();
+                    ctx.globalAlpha = 1.0;
+                }
+
+                // Círculo base brillante
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+                ctx.shadowBlur = 0; // Reset
+
+                // Borde interior elegante
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius - 2, 0, Math.PI * 2);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Dibujar el emoji del Bumper
+                ctx.font = `${this.radius * 1.1}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, this.x, this.y + 1);
+
+                // Nombre del jugador flotando
+                ctx.font = 'bold 11px Outfit';
+                ctx.fillStyle = '#f8fafc';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.name, this.x, this.y - this.radius - 8);
+            }
+        }
+
+        // --- SISTEMA DE PARTÍCULAS ---
+        function createExplosion(x, y, color) {
+            for (let i = 0; i < 20; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    radius: Math.random() * 4 + 2,
+                    color: color,
+                    alpha: 1.0,
+                    decay: Math.random() * 0.03 + 0.01
+                });
+            }
+        }
+
+        function drawParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= p.decay;
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // --- SISTEMA DE COMIDA (Estrellas de energía) ---
+        function spawnFood() {
+            while (food.length < maxFoodCount) {
+                // Spawn aleatorio dentro de la arena actual
+                const angle = Math.random() * Math.PI * 2;
+                const distance = Math.random() * (Arena.radius - 25);
+                food.push({
+                    x: Arena.x + Math.cos(angle) * distance,
+                    y: Arena.y + Math.sin(angle) * distance,
+                    radius: 6,
+                    color: '#facc15' // Amarillo estrella
+                });
+            }
+        }
+
+        function drawFood() {
+            food.forEach(f => {
+                ctx.beginPath();
+                ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
+                ctx.fillStyle = f.color;
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = f.color;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+        }
+
+        // --- MANEJO DE COLISIONES ---
+        function handleCollisions() {
+            const keys = Object.keys(players);
+            
+            // Colisiones Jugador contra Jugador
+            for (let i = 0; i < keys.length; i++) {
+                for (let j = i + 1; j < keys.length; j++) {
+                    const p1 = players[keys[i]];
+                    const p2 = players[keys[j]];
+
+                    if (!p1.alive || !p2.alive) continue;
+
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const distance = Math.hypot(dx, dy);
+                    const minDist = p1.radius + p2.radius;
+
+                    if (distance < minDist) {
+                        playSound('hit');
+                        // Registrar atacante para puntuaciones
+                        p1.lastHitBy = p2.id;
+                        p2.lastHitBy = p1.id;
+
+                        // Efecto visual en la colisión
+                        createExplosion((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, '#ffffff');
+
+                        // Vector normal de colisión
+                        const nx = dx / distance;
+                        const ny = dy / distance;
+
+                        // Penetración
+                        const overlap = minDist - distance;
+                        p1.x -= nx * overlap * 0.5;
+                        p1.y -= ny * overlap * 0.5;
+                        p2.x += nx * overlap * 0.5;
+                        p2.y += ny * overlap * 0.5;
+
+                        // Velocidad relativa
+                        const rvx = p2.vx - p1.vx;
+                        const rvy = p2.vy - p1.vy;
+
+                        // Velocidad en dirección de la normal
+                        const velAlongNormal = rvx * nx + rvy * ny;
+
+                        if (velAlongNormal < 0) {
+                            // Elasticidad reforzada para empujes épicos y adictivos
+                            const restitution = 1.35; 
+                            
+                            // Impulso escalar ajustado por masa
+                            let impulseScalar = -(1 + restitution) * velAlongNormal;
+                            impulseScalar /= (1 / p1.mass + 1 / p2.mass);
+
+                            // Aplicar impulso
+                            const impulseX = impulseScalar * nx;
+                            const impulseY = impulseScalar * ny;
+
+                            p1.vx -= (1 / p1.mass) * impulseX;
+                            p1.vy -= (1 / p1.mass) * impulseY;
+                            p2.vx += (1 / p2.mass) * impulseX;
+                            p2.vy += (1 / p2.mass) * impulseY;
+                        }
+                    }
+                }
+            }
+
+            // Colisiones Jugador contra Comida (Estrellas)
+            keys.forEach(pId => {
+                const p = players[pId];
+                if (!p.alive) return;
+
+                for (let i = food.length - 1; i >= 0; i--) {
+                    const f = food[i];
+                    const dist = Math.hypot(f.x - p.x, f.y - p.y);
+                    if (dist < p.radius + f.radius) {
+                        food.splice(i, 1);
+                        p.radius += 1.0; // Crece un poco
+                        p.mass += 1.5;   // Se vuelve más pesado y poderoso
+                        if (pId === localPlayerId) {
+                            playSound('star');
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- INTELIGENCIA ARTIFICIAL DE LOS BOTS ---
+        function updateBots() {
+            const now = Date.now();
+            Object.keys(players).forEach(id => {
+                const bot = players[id];
+                if (!bot.alive || !bot.isBot) return;
+
+                // Planificar movimiento cada 400ms para simular reacción humana
+                if (now > bot.botNextDecision) {
+                    bot.botNextDecision = now + Math.random() * 400 + 200;
+
+                    // Buscar objetivo prioritario: Comida cercana o el jugador más cercano para chocarlo
+                    let targetX = 0;
+                    let targetY = 0;
+                    let minDistance = 999999;
+
+                    // Buscar estrella cercana
+                    food.forEach(f => {
+                        const d = Math.hypot(f.x - bot.x, f.y - bot.y);
+                        if (d < minDistance) {
+                            minDistance = d;
+                            targetX = f.x;
+                            targetY = f.y;
+                        }
+                    });
+
+                    // Chocar rivales si están demasiado cerca
+                    Object.keys(players).forEach(otherId => {
+                        if (otherId === bot.id || !players[otherId].alive) return;
+                        const other = players[otherId];
+                        const d = Math.hypot(other.x - bot.x, other.y - bot.y);
+                        if (d < 180 && d < minDistance) {
+                            minDistance = d;
+                            targetX = other.x;
+                            targetY = other.y;
+                        }
+                    });
+
+                    // Si la IA está al borde del abismo, tratar de volver urgentemente al centro
+                    const distToCenter = Math.hypot(bot.x - Arena.x, bot.y - Arena.y);
+                    if (distToCenter > Arena.radius * 0.7) {
+                        targetX = Arena.x;
+                        targetY = Arena.y;
+                    }
+
+                    bot.botTargetX = targetX;
+                    bot.botTargetY = targetY;
+
+                    // Ejecutar impulso en dirección al objetivo
+                    const dx = bot.botTargetX - bot.x;
+                    const dy = bot.botTargetY - bot.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > 5) {
+                        const impulse = 5.5 + (Math.random() * 2); // velocidad aleatoria del bot
+                        bot.vx += (dx / dist) * impulse;
+                        bot.vy += (dy / dist) * impulse;
+                    }
+                }
+            });
+        }
+
+        // --- VERIFICAR FIN DE JUEGO ---
+        function checkEndGameConditions() {
+            const alivePlayers = Object.values(players).filter(p => p.alive);
+            
+            // Actualizar contador del HUD
+            document.getElementById("hud-alive-count").innerText = alivePlayers.length;
+
+            if (!players[localPlayerId]?.alive) {
+                // El jugador local ha caído de la arena
+                endGame(false);
+                return;
+            }
+
+            if (alivePlayers.length === 1 && alivePlayers[0].id === localPlayerId) {
+                // ¡Victoria! Solo queda el local
+                endGame(true);
+            }
+        }
+
+        // --- FINALIZAR EL JUEGO (GAME OVER / VICTORIA) ---
+        function endGame(won = false) {
+            isGameRunning = false;
+            
+            // Construir tabla de posiciones
+            const goTitle = document.getElementById("go-title");
+            const goSubtitle = document.getElementById("go-subtitle");
+            
+            if (won) {
+                goTitle.innerText = "¡VICTORIA!";
+                goTitle.className = "text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400 mb-2";
+                goSubtitle.innerText = "¡Has dominado la Bumper Arena!";
+            } else {
+                goTitle.innerText = "¡ELIMINADO!";
+                goTitle.className = "text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-amber-500 mb-2";
+                goSubtitle.innerText = "Buen intento, pero caíste de la arena.";
+            }
+
+            // Ordenar por estatus vivo y luego por K.O.s
+            const sorted = Object.values(players).sort((a, b) => {
+                if (a.alive && !b.alive) return -1;
+                if (!a.alive && b.alive) return 1;
+                return b.score - a.score;
+            });
+
+            const leaderboardDiv = document.getElementById("go-leaderboard");
+            leaderboardDiv.innerHTML = "";
+            
+            sorted.forEach((p, index) => {
+                const item = document.createElement("div");
+                item.className = `flex justify-between items-center p-3 rounded-xl border ${p.id === localPlayerId ? 'bg-indigo-950/40 border-indigo-500/50' : 'bg-slate-800/30 border-slate-800'}`;
+                item.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-slate-400 w-5">#${index+1}</span>
+                        <span class="text-xl">${p.emoji}</span>
+                        <span class="font-semibold text-slate-200">${p.name} ${p.id === localPlayerId ? '(Tú)' : ''}</span>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs">
+                        <span class="${p.alive ? 'text-emerald-400' : 'text-slate-500'} font-bold uppercase">${p.alive ? 'En Arena' : 'K.O.'}</span>
+                        <span class="bg-slate-950 text-amber-400 font-extrabold px-2 py-1 rounded border border-slate-800">${p.score} KOs</span>
+                    </div>
+                `;
+                leaderboardDiv.appendChild(item);
+            });
+
+            gameHud.classList.add("hidden");
+            gameOverScreen.classList.remove("hidden");
+
+            // Si es multijugador y somos anfitriones, resetear estado en FireStore o Notificar Peers
+            if (gameMode === 'multi') {
+                if (isHost) {
+                    if (usePeerJSFallback) {
+                        broadcastToPeers({ type: 'lobby' });
+                    } else if (db) {
+                        const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', activeRoomId);
+                        updateDoc(roomRef, { status: 'lobby' });
+                    }
+                }
+            }
+        }
+
+        // --- SISTEMA DE TOASTS Y CUENTA REGRESIVA ---
+        function startCountdown() {
+            isCountdownActive = true;
+            const overlay = document.getElementById("countdown-overlay");
+            const textEl = document.getElementById("countdown-text");
+            overlay.classList.remove("hidden");
+            
+            let count = 3;
+            textEl.innerText = count;
+            textEl.style.transform = "scale(1.5)";
+            playSound('star');
+
+            setTimeout(() => { textEl.style.transform = "scale(1)"; }, 100);
+
+            const interval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    textEl.innerText = count;
+                    textEl.style.transform = "scale(1.5)";
+                    setTimeout(() => { textEl.style.transform = "scale(1)"; }, 100);
+                    playSound('star');
+                } else if (count === 0) {
+                    textEl.innerText = "¡GO!";
+                    textEl.className = "text-8xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-b from-emerald-400 to-teal-500 drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] transition-all duration-100 transform";
+                    textEl.style.transform = "scale(1.8)";
+                    setTimeout(() => { textEl.style.transform = "scale(1)"; }, 100);
+                    playSound('boost');
+                } else {
+                    clearInterval(interval);
+                    overlay.classList.add("hidden");
+                    // Resetear clases para la siguiente partida
+                    textEl.className = "text-8xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-amber-500 drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] transition-all duration-100 transform";
+                    isCountdownActive = false;
+                }
+            }, 1000);
+        }
+
+        // --- SISTEMA DE INICIO DE PARTIDA ---
+        function startNewGame(mode = 'solo') {
+            gameMode = mode;
+            isGameRunning = true;
+            scoreKO = 0;
+            document.getElementById("hud-score").innerText = 0;
+            particles = [];
+            food = [];
+
+            // Reiniciar Arena
+            Arena.radius = Arena.baseRadius;
+            Arena.targetRadius = Arena.baseRadius;
+
+            // Limpiar lista de jugadores
+            players = {};
+
+            // Agregar jugador local
+            const nameInput = document.getElementById("player-name").value || "Jugador";
+            localPlayerId = currentUserId || 'local_user';
+            
+            players[localPlayerId] = new Player(localPlayerId, nameInput, selectedEmoji, selectedColor, false);
+
+            if (mode === 'solo') {
+                // Agregar bots
+                const botNames = ["TurboBot", "BumperPro", "GigaSmasher", "CrashKing", "SumoRobot", "NeonRival"];
+                for (let i = 0; i < 5; i++) {
+                    const botId = `bot_${i}`;
+                    const randomEmoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+                    const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)].code;
+                    players[botId] = new Player(botId, botNames[i], randomEmoji, randomColor, true);
+                }
+            }
+
+            // Ocultar Menús, Mostrar Canvas y HUD
+            menuScreen.classList.add("hidden");
+            lobbyScreen.classList.add("hidden");
+            gameOverScreen.classList.add("hidden");
+            gameHud.classList.remove("hidden");
+
+            // Ejecutar Bucle de Juego
+            resizeCanvas();
+            spawnFood();
+            requestAnimationFrame(gameLoop);
+            startCountdown();
+        }
+
+        // --- BUCLE PRINCIPAL DEL JUEGO (60 FPS LOCAL) ---
+        let lastFrameTime = Date.now();
+        let lastSyncTime = 0;
+
+        function gameLoop() {
+            if (!isGameRunning) return;
+
+            const now = Date.now();
+            const delta = now - lastFrameTime;
+            lastFrameTime = now;
+
+            // Limpieza de pantalla
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Centrar cámara en la arena
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+
+            // Reducir la Arena con el paso del tiempo de forma progresiva (Solo si la cuenta terminó)
+            if (!isCountdownActive && Arena.radius > 80) {
+                Arena.radius -= Arena.shrinkSpeed * (delta / 16);
+            }
+
+            // Alerta visual de encogimiento
+            const warningEl = document.getElementById("hud-ring-warning");
+            if (Arena.radius < Arena.baseRadius * 0.6) {
+                warningEl.classList.remove("hidden");
+            } else {
+                warningEl.classList.add("hidden");
+            }
+
+            // Dibujar Arena circular
+            ctx.beginPath();
+            ctx.arc(Arena.x, Arena.y, Arena.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#1e293b';
+            ctx.fill();
+
+            // Borde luminoso de la arena (Anillo de fuerza)
+            ctx.beginPath();
+            ctx.arc(Arena.x, Arena.y, Arena.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ec4899'; // Neón Rosa
+            ctx.lineWidth = 6;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#ec4899';
+            ctx.stroke();
+            ctx.shadowBlur = 0; // Reset
+
+            // Dibujar alimentos y partículas
+            spawnFood();
+            drawFood();
+            drawParticles();
+
+            // Actualizar Física y Lógica de Jugadores (Solo si terminó la cuenta regresiva)
+            if (!isCountdownActive) {
+                Object.values(players).forEach(p => p.update());
+                handleCollisions();
+
+                if (gameMode === 'solo') {
+                    updateBots();
+                }
+            }
+
+            // Dibujar a todos los jugadores
+            Object.values(players).forEach(p => p.draw());
+
+            // Dibujar indicador visual de arrastre (Joystick táctil)
+            if (isDragging && players[localPlayerId]?.alive) {
+                const lp = players[localPlayerId];
+                
+                // Línea de dirección de empuje
+                const dx = dragCurrent.x - dragStart.x;
+                const dy = dragCurrent.y - dragStart.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist > 5) {
+                    const angle = Math.atan2(dy, dx);
+                    // Proyección del empuje
+                    ctx.beginPath();
+                    ctx.moveTo(lp.x, lp.y);
+                    ctx.lineTo(lp.x + Math.cos(angle) * Math.min(dist * 0.8, 120), lp.y + Math.sin(angle) * Math.min(dist * 0.8, 120));
+                    ctx.strokeStyle = '#f43f5e';
+                    ctx.lineWidth = 4;
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]); // Reset
+                }
+            }
+
+            ctx.restore();
+
+            // Sincronización de red
+            if (gameMode === 'multi') {
+                if (now - lastSyncTime > 150) { // Sincronización cada 150ms
+                    syncPlayerState();
+                    lastSyncTime = now;
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- COMPORTAMIENTO RESPONSIVO DEL CANVAS ---
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // Adaptar escala de la arena si es pantalla de teléfono pequeño
+            if (canvas.width < 500) {
+                Arena.baseRadius = canvas.width * 0.45;
+            } else {
+                Arena.baseRadius = 320;
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+
+        // --- MANEJADORES DE CONTROLES (TOQUES Y RATÓN) ---
+        function getCanvasMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function handlePointerDown(e) {
+            if (!isGameRunning || isCountdownActive || !players[localPlayerId]?.alive) return;
+            isDragging = true;
+            const pos = getCanvasMousePos(e);
+            dragStart = pos;
+            dragCurrent = pos;
+        }
+
+        function handlePointerMove(e) {
+            if (!isDragging) return;
+            dragCurrent = getCanvasMousePos(e);
+        }
+
+        function handlePointerUp() {
+            if (!isDragging) return;
+            isDragging = false;
+
+            const lp = players[localPlayerId];
+            if (!lp || !lp.alive) return;
+
+            const dx = dragCurrent.x - dragStart.x;
+            const dy = dragCurrent.y - dragStart.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist > 10) {
+                playSound('boost');
+                // Magnitud de impulso basado en arrastre
+                const angle = Math.atan2(dy, dx);
+                const force = Math.min(dist * 0.08, 9); // Límite de potencia
+                lp.vx += Math.cos(angle) * force;
+                lp.vy += Math.sin(angle) * force;
+            }
+        }
+
+        // Eventos táctiles y ratón
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+
+        canvas.addEventListener('touchstart', (e) => {
+            handlePointerDown(e);
+            // Evitar comportamiento por defecto como scroll táctil
+            e.preventDefault();
+        }, { passive: false });
+        canvas.addEventListener('touchmove', (e) => {
+            handlePointerMove(e);
+            e.preventDefault();
+        }, { passive: false });
+        window.addEventListener('touchend', handlePointerUp);
+
+
+        // ==========================================================
+        //  LÓGICA MULTIJUGADOR HÍBRIDA (FIRESTORE Y PEERJS FALLBACK)
+        // ==========================================================
+
+        // Sincronizar nuestro estado local con Firestore o con los Peers P2P
+        async function syncPlayerState() {
+            const lp = players[localPlayerId];
+            if (!lp) return;
+
+            if (usePeerJSFallback) {
+                // Sincronización vía WebRTC P2P
+                const playerPayload = {
+                    id: currentUserId,
+                    name: lp.name,
+                    emoji: lp.emoji,
+                    color: lp.color,
+                    x: lp.x,
+                    y: lp.y,
+                    vx: lp.vx,
+                    vy: lp.vy,
+                    radius: lp.radius,
+                    mass: lp.mass,
+                    score: lp.score,
+                    alive: lp.alive,
+                    lastUpdate: Date.now()
+                };
+
+                if (isHost) {
+                    // El Host envía a todos los jugadores el estado actual de la arena, comida y jugadores
+                    broadcastToPeers({
+                        type: 'gameSync',
+                        arenaRadius: Arena.radius,
+                        players: Object.fromEntries(Object.entries(players).map(([id, p]) => [id, {
+                            id: p.id,
+                            name: p.name,
+                            emoji: p.emoji,
+                            color: p.color,
+                            x: p.x,
+                            y: p.y,
+                            vx: p.vx,
+                            vy: p.vy,
+                            radius: p.radius,
+                            mass: p.mass,
+                            score: p.score,
+                            alive: p.alive
+                        }]))
+                    });
+                } else {
+                    // El Cliente envía su estado al Host
+                    if (peerConnToHost && peerConnToHost.open) {
+                        peerConnToHost.send({
+                            type: 'clientSync',
+                            player: playerPayload
+                        });
+                    }
+                }
+                return;
+            }
+
+            // Sincronización clásica usando Firestore (Seguro)
+            if (!db) return;
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', activeRoomId);
+            try {
+                const payload = {};
+                payload[`players.${currentUserId}.x`] = lp.x;
+                payload[`players.${currentUserId}.y`] = lp.y;
+                payload[`players.${currentUserId}.vx`] = lp.vx;
+                payload[`players.${currentUserId}.vy`] = lp.vy;
+                payload[`players.${currentUserId}.radius`] = lp.radius;
+                payload[`players.${currentUserId}.mass`] = lp.mass;
+                payload[`players.${currentUserId}.score`] = lp.score;
+                payload[`players.${currentUserId}.alive`] = lp.alive;
+                payload[`players.${currentUserId}.lastUpdate`] = Date.now();
+
+                // Si somos el host, también gobernamos la reducción de la arena y comida
+                if (isHost) {
+                    payload['arenaRadius'] = Arena.radius;
+                }
+
+                await updateDoc(roomRef, payload);
+            } catch (err) {
+                console.error("Error enviando telemetría de jugador:", err);
+            }
+        }
+
+        // Crear una nueva Sala Multijugador
+        async function createMultiplayerRoom() {
+            const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+            activeRoomId = roomId;
+            isHost = true;
+            const nameInput = document.getElementById("player-name").value || "Anfitrión";
+
+            if (usePeerJSFallback) {
+                // Configurar Servidor de Señales PeerJS
+                try {
+                    // Inicializar Host Peer con id único de sala
+                    peer = new Peer('BUMPER-' + roomId);
+                    
+                    peer.on('open', (id) => {
+                        console.log('Sala PeerJS creada de manera local con ID:', id);
+                        
+                        // Agregar anfitrión localmente
+                        players = {};
+                        players[currentUserId] = new Player(currentUserId, nameInput, selectedEmoji, selectedColor, false);
+                        
+                        setupLobbyUI(roomId);
+                        updateLobbyPlayersList(players);
+                    });
+
+                    peer.on('connection', (conn) => {
+                        console.log('Un nuevo par/peer se ha conectado:', conn.peer);
+                        
+                        conn.on('data', (data) => {
+                            if (data.type === 'join') {
+                                // Nuevo invitado se une al lobby
+                                players[data.player.id] = new Player(data.player.id, data.player.name, data.player.emoji, data.player.color, false);
+                                peerConnections[data.player.id] = conn;
+                                
+                                updateLobbyPlayersList(players);
+                                // Notificar a todos la nueva lista del Lobby
+                                broadcastToPeers({
+                                    type: 'lobbyUpdate',
+                                    players: Object.fromEntries(Object.entries(players).map(([id, p]) => [id, {
+                                        id: p.id,
+                                        name: p.name,
+                                        emoji: p.emoji,
+                                        color: p.color
+                                    }]))
+                                });
+                            }
+                            else if (data.type === 'clientSync') {
+                                // Actualizar datos de jugador cliente en el Host
+                                const p = players[data.player.id];
+                                if (p) {
+                                    p.x = data.player.x;
+                                    p.y = data.player.y;
+                                    p.vx = data.player.vx;
+                                    p.vy = data.player.vy;
+                                    p.radius = data.player.radius;
+                                    p.mass = data.player.mass;
+                                    p.score = data.player.score;
+                                    p.alive = data.player.alive;
+                                }
+                            }
+                        });
+
+                        conn.on('close', () => {
+                            // Detectar desconexión de un Peer cliente
+                            Object.keys(peerConnections).forEach(id => {
+                                if (peerConnections[id] === conn) {
+                                    delete players[id];
+                                    delete peerConnections[id];
+                                }
+                            });
+                            updateLobbyPlayersList(players);
+                            broadcastToPeers({
+                                type: 'lobbyUpdate',
+                                players: Object.fromEntries(Object.entries(players).map(([id, p]) => [id, {
+                                    id: p.id,
+                                    name: p.name,
+                                    emoji: p.emoji,
+                                    color: p.color
+                                }]))
+                            });
+                        });
+                    });
+
+                    peer.on('error', (err) => {
+                        console.error('Error del Servidor de Señal P2P:', err);
+                        alertToast("Error al inicializar canal P2P de red local.");
+                    });
+
+                } catch (err) {
+                    console.error("Fallo de inicialización P2P:", err);
+                }
+                return;
+            }
+
+            // Flujo original de Firebase
+            if (!db || !currentUserId) {
+                alertToast("Error: Sin conexión con la red multijugador.");
+                return;
+            }
+
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+            const initialRoomState = {
+                roomId: roomId,
+                hostId: currentUserId,
+                status: 'lobby',
+                arenaRadius: Arena.baseRadius,
+                players: {
+                    [currentUserId]: {
+                        id: currentUserId,
+                        name: nameInput,
+                        emoji: selectedEmoji,
+                        color: selectedColor,
+                        x: 0,
+                        y: 0,
+                        vx: 0,
+                        vy: 0,
+                        radius: 20,
+                        mass: 20,
+                        score: 0,
+                        alive: true,
+                        lastUpdate: Date.now()
+                    }
+                }
+            };
+
+            try {
+                await setDoc(roomRef, initialRoomState);
+                setupLobbyUI(roomId);
+                listenToRoom(roomId);
+            } catch (err) {
+                console.error("Error creando la sala:", err);
+                alertToast("Error creando la sala. Revisa tu conexión de red.");
+            }
+        }
+
+        // Unirse a una Sala Existente (Firebase o P2P WebRTC)
+        async function joinMultiplayerRoom(roomId) {
+            const nameInput = document.getElementById("player-name").value || "Invitado";
+
+            if (usePeerJSFallback) {
+                try {
+                    peer = new Peer();
+                    
+                    peer.on('open', (id) => {
+                        console.log('Uniendo a la sala local mediante Peer ID:', id);
+                        peerConnToHost = peer.connect('BUMPER-' + roomId);
+                        
+                        peerConnToHost.on('open', () => {
+                            activeRoomId = roomId;
+                            isHost = false;
+                            setupLobbyUI(roomId);
+
+                            // Notificar nuestra entrada al Host
+                            peerConnToHost.send({
+                                type: 'join',
+                                player: {
+                                    id: currentUserId,
+                                    name: nameInput,
+                                    emoji: selectedEmoji,
+                                    color: selectedColor
+                                }
+                            });
+                        });
+
+                        peerConnToHost.on('data', (data) => {
+                            if (data.type === 'lobbyUpdate') {
+                                // El Host nos manda la lista actualizada
+                                updateLobbyPlayersList(data.players);
+                            }
+                            else if (data.type === 'start') {
+                                // Transición directa a la arena
+                                prepareMultiplayerGame(data.roomData);
+                            }
+                            else if (data.type === 'gameSync') {
+                                // Sincronización de físicas y posiciones recibida del Host
+                                syncActiveGame({
+                                    arenaRadius: data.arenaRadius,
+                                    players: data.players
+                                });
+                            }
+                        });
+
+                        peerConnToHost.on('close', () => {
+                            alertToast("Se ha perdido la conexión con el Host local.");
+                            exitLobby();
+                        });
+                    });
+
+                    peer.on('error', (err) => {
+                        console.error('Error al unirse al par local:', err);
+                        alertToast("No se pudo conectar a la sala Wi-Fi. Asegúrate que el Host esté en línea.");
+                    });
+
+                } catch (err) {
+                    console.error("Error de conexión PeerJS local:", err);
+                }
+                return;
+            }
+
+            // Flujo original de Firebase
+            if (!db || !currentUserId) return;
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+
+            try {
+                const snap = await getDoc(roomRef);
+                if (!snap.exists()) {
+                    alertToast("La sala de juego ya no existe.");
+                    return;
+                }
+
+                const roomData = snap.data();
+                if (roomData.status === 'playing') {
+                    alertToast("La partida ya está en curso.");
+                    return;
+                }
+
+                // Unirse agregando datos al mapa de jugadores
+                const updatePayload = {};
+                updatePayload[`players.${currentUserId}`] = {
+                    id: currentUserId,
+                    name: nameInput,
+                    emoji: selectedEmoji,
+                    color: selectedColor,
+                    x: (Math.random() - 0.5) * 150,
+                    y: (Math.random() - 0.5) * 150,
+                    vx: 0,
+                    vy: 0,
+                    radius: 20,
+                    mass: 20,
+                    score: 0,
+                    alive: true,
+                    lastUpdate: Date.now()
+                };
+
+                await updateDoc(roomRef, updatePayload);
+                activeRoomId = roomId;
+                isHost = false;
+
+                setupLobbyUI(roomId);
+                listenToRoom(roomId);
+            } catch (err) {
+                console.error("Error uniéndose a la sala:", err);
+                alertToast("No se pudo conectar con la sala elegida.");
+            }
+        }
+
+        // Host envía datos de transmisión a todos los clientes WebRTC
+        function broadcastToPeers(payload) {
+            Object.values(peerConnections).forEach(conn => {
+                if (conn.open) {
+                    conn.send(payload);
+                }
+            });
+        }
+
+        // Escuchar los cambios en Tiempo Real de la Sala (Únicamente para Firebase)
+        function listenToRoom(roomId) {
+            if (unsubscribeRoom) unsubscribeRoom();
+
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+            
+            unsubscribeRoom = onSnapshot(roomRef, (snapshot) => {
+                if (!snapshot.exists()) {
+                    alertToast("La sala ha sido cerrada.");
+                    exitLobby();
+                    return;
+                }
+
+                const data = snapshot.data();
+                
+                // Actualizar interfaz del Lobby si la partida no ha iniciado
+                if (data.status === 'lobby') {
+                    updateLobbyPlayersList(data.players);
+                    if (data.hostId !== currentUserId) {
+                        document.getElementById("waiting-host-msg").classList.remove("hidden");
+                    }
+                } 
+                // Transición Lobby -> Juego
+                else if (data.status === 'playing' && !isGameRunning) {
+                    prepareMultiplayerGame(data);
+                }
+
+                // Sincronización continua de la partida en curso
+                if (isGameRunning) {
+                    syncActiveGame(data);
+                }
+            }, (error) => {
+                console.error("Error en tiempo real en la sala:", error);
+            });
+        }
+
+        // Preparar y renderizar el juego multijugador al iniciar la sala
+        function prepareMultiplayerGame(roomData) {
+            gameMode = 'multi';
+            isGameRunning = true;
+            scoreKO = 0;
+            document.getElementById("hud-score").innerText = 0;
+            particles = [];
+            food = [];
+
+            // Reiniciar Arena con los datos del servidor
+            Arena.radius = roomData.arenaRadius || Arena.baseRadius;
+
+            // Mapear jugadores al motor físico
+            players = {};
+            localPlayerId = currentUserId;
+
+            Object.values(roomData.players).forEach(p => {
+                const playerObj = new Player(p.id, p.name, p.emoji, p.color, false);
+                playerObj.x = p.x || (Math.random() - 0.5) * 150;
+                playerObj.y = p.y || (Math.random() - 0.5) * 150;
+                playerObj.vx = p.vx || 0;
+                playerObj.vy = p.vy || 0;
+                playerObj.radius = p.radius || 20;
+                playerObj.mass = p.mass || 20;
+                playerObj.score = p.score || 0;
+                playerObj.alive = p.alive !== undefined ? p.alive : true;
+                players[p.id] = playerObj;
+            });
+
+            menuScreen.classList.add("hidden");
+            lobbyScreen.classList.add("hidden");
+            gameOverScreen.classList.add("hidden");
+            gameHud.classList.remove("hidden");
+
+            resizeCanvas();
+            spawnFood();
+            requestAnimationFrame(gameLoop);
+            startCountdown();
+        }
+
+        // Sincronizar coordenadas en tiempo real durante la ronda
+        function syncActiveGame(roomData) {
+            // Actualizar Arena dictaminada por el Anfitrión
+            if (!isHost && roomData.arenaRadius) {
+                Arena.radius = roomData.arenaRadius;
+            }
+
+            // Sincronizar posiciones de los demás jugadores (Interpolando para que sea suave)
+            Object.values(roomData.players).forEach(serverPlayer => {
+                if (serverPlayer.id === currentUserId) {
+                    // Nosotros gobernamos nuestra posición, solo tomamos colisiones o muerte que decida el servidor
+                    if (!serverPlayer.alive && players[currentUserId]) {
+                        players[currentUserId].alive = false;
+                    }
+                    return;
+                }
+
+                let localCopy = players[serverPlayer.id];
+                if (!localCopy) {
+                    // Nuevo jugador que no teníamos mapeado
+                    localCopy = new Player(serverPlayer.id, serverPlayer.name, serverPlayer.emoji, serverPlayer.color, false);
+                    players[serverPlayer.id] = localCopy;
+                }
+
+                // Interpolación suave de datos recibidos (LERP) para evitar saltos bruscos
+                if (serverPlayer.alive) {
+                    localCopy.x = localCopy.x * 0.4 + serverPlayer.x * 0.6;
+                    localCopy.y = localCopy.y * 0.4 + serverPlayer.y * 0.6;
+                    localCopy.vx = serverPlayer.vx;
+                    localCopy.vy = serverPlayer.vy;
+                    localCopy.radius = serverPlayer.radius;
+                    localCopy.mass = serverPlayer.mass;
+                    localCopy.score = serverPlayer.score;
+                } else {
+                    localCopy.alive = false;
+                }
+            });
+
+            // Eliminar jugadores que salieron de la sala física
+            Object.keys(players).forEach(id => {
+                if (!roomData.players[id]) {
+                    delete players[id];
+                }
+            });
+        }
+
+        // Inicializar interfaz visual del Lobby
+        function setupLobbyUI(roomId) {
+            menuScreen.classList.add("hidden");
+            lobbyScreen.classList.remove("hidden");
+
+            // Crear link de compartición compatible con Wi-Fi compartido / Anclaje
+            const invitationLink = window.location.origin + window.location.pathname + '#room=' + roomId;
+            document.getElementById("share-url").value = invitationLink;
+
+            if (isHost) {
+                document.getElementById("btn-start-game").classList.remove("hidden");
+                document.getElementById("waiting-host-msg").classList.add("hidden");
+            } else {
+                document.getElementById("btn-start-game").classList.add("hidden");
+                document.getElementById("waiting-host-msg").classList.remove("hidden");
+            }
+        }
+
+        // Renderizar la lista de jugadores que se encuentran en el Lobby
+        function updateLobbyPlayersList(playersMap) {
+            const listContainer = document.getElementById("lobby-players-list");
+            listContainer.innerHTML = "";
+
+            const playersArr = Object.values(playersMap);
+            document.getElementById("player-count").innerText = `${playersArr.length}/8`;
+
+            playersArr.forEach(p => {
+                const item = document.createElement("div");
+                item.className = "flex items-center justify-between p-3 bg-slate-900 border border-slate-800 rounded-xl";
+                item.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">${p.emoji}</span>
+                        <div class="flex flex-col">
+                            <span class="font-bold text-slate-200">${p.name} ${p.id === currentUserId ? '(Tú)' : ''}</span>
+                            <span class="text-[10px] text-slate-500">${p.id}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        ${p.id === currentUserId ? '<span class="text-[10px] bg-indigo-500/20 text-indigo-400 font-bold px-2 py-0.5 rounded-full">Tú</span>' : ''}
+                        <span class="text-xs text-slate-400 font-semibold uppercase">Listo</span>
+                    </div>
+                `;
+                listContainer.appendChild(item);
+            });
+        }
+
+        // Abandonar la sala del Lobby
+        async function exitLobby() {
+            if (unsubscribeRoom) unsubscribeRoom();
+            
+            if (usePeerJSFallback) {
+                if (peer) {
+                    peer.destroy();
+                }
+                peer = null;
+                peerConnToHost = null;
+                peerConnections = {};
+            } else if (activeRoomId && db && currentUserId) {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', activeRoomId);
+                try {
+                    const snap = await getDoc(roomRef);
+                    if (snap.exists()) {
+                        const data = snap.data();
+                        if (data.hostId === currentUserId) {
+                            // Si el anfitrión sale, se desintegra la sala
+                            await setDoc(roomRef, {}, { merge: false });
+                        } else {
+                            // Salida normal de un invitado
+                            const updatePayload = {};
+                            updatePayload[`players.${currentUserId}`] = deleteField();
+                            await updateDoc(roomRef, updatePayload);
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            activeRoomId = null;
+            isHost = false;
+            window.location.hash = "";
+            lobbyScreen.classList.add("hidden");
+            menuScreen.classList.remove("hidden");
+        }
+
+        // Detectar enlace de sala desde la URL hash
+        function detectRoomInUrl() {
+            const hash = window.location.hash;
+            if (hash.startsWith('#room=')) {
+                const roomId = hash.replace('#room=', '').toUpperCase();
+                document.getElementById("join-status-box").classList.remove("hidden");
+                
+                document.getElementById("btn-join-direct").onclick = async () => {
+                    document.getElementById("join-status-box").classList.add("hidden");
+                    await joinMultiplayerRoom(roomId);
+                };
+            }
+        }
+
+        // --- SISTEMA DE TOASTS PARA ALERTAS SIN ALERT() ---
+        function alertToast(msg) {
+            const toast = document.createElement("div");
+            toast.className = "fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-rose-600/95 border border-rose-400 text-white font-bold text-sm px-6 py-3 rounded-full shadow-2xl z-50 animate-bounce";
+            toast.innerText = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+
+        // ==========================================
+        //  VINCULACIÓN DE EVENTOS DE BOTONES
+        // ==========================================
+
+        document.getElementById("btn-solo").addEventListener('click', () => {
+            startNewGame('solo');
+        });
+
+        document.getElementById("btn-create").addEventListener('click', async () => {
+            await createMultiplayerRoom();
+        });
+
+        document.getElementById("btn-start-game").addEventListener('click', async () => {
+            if (!isHost || !activeRoomId) return;
+
+            if (usePeerJSFallback) {
+                // Notificar a todos los clientes conectados a través de PeerJS
+                broadcastToPeers({
+                    type: 'start',
+                    roomData: {
+                        arenaRadius: Arena.baseRadius,
+                        players: Object.fromEntries(Object.entries(players).map(([id, p]) => [id, {
+                            id: p.id,
+                            name: p.name,
+                            emoji: p.emoji,
+                            color: p.color
+                        }]))
+                    }
+                });
+                // Iniciar para el Host de manera local
+                prepareMultiplayerGame({
+                    arenaRadius: Arena.baseRadius,
+                    players: players
+                });
+                return;
+            }
+
+            // Flujo original Firebase
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', activeRoomId);
+            try {
+                await updateDoc(roomRef, { status: 'playing' });
+            } catch (err) {
+                console.error("Error iniciando partida en el servidor:", err);
+            }
+        });
+
+        document.getElementById("btn-leave-lobby").addEventListener('click', async () => {
+            await exitLobby();
+        });
+
+        document.getElementById("btn-go-replay").addEventListener('click', () => {
+            if (gameMode === 'solo') {
+                startNewGame('solo');
+            } else {
+                // En multijugador, vuelve al lobby listo para la próxima ronda
+                setupLobbyUI(activeRoomId);
+                gameOverScreen.classList.add("hidden");
+                lobbyScreen.classList.remove("hidden");
+            }
+        });
+
+        document.getElementById("btn-go-menu").addEventListener('click', () => {
+            gameOverScreen.classList.add("hidden");
+            menuScreen.classList.remove("hidden");
+            window.location.hash = "";
+        });
+
+        // Copiar enlace al portapapeles de manera segura
+        document.getElementById("btn-copy-url").addEventListener('click', () => {
+            const shareInput = document.getElementById("share-url");
+            shareInput.select();
+            shareInput.setSelectionRange(0, 99999); // Para móviles
+            
+            try {
+                document.execCommand('copy');
+                const toast = document.getElementById("copy-toast");
+                toast.classList.remove("hidden");
+                setTimeout(() => toast.classList.add("hidden"), 2000);
+            } catch (err) {
+                alertToast("Error al copiar enlace automáticamente.");
+            }
+        });
+
+        // Inicialización
+        setupCustomizer();
+        initFirebase();
+
+    </script>
+</body>
+</html>
